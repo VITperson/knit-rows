@@ -1,0 +1,126 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  rowAt, rowBand, rowHeight, lastRow, normRect,
+  labelPoints, detectCalibration, detectSequence,
+} from "../js/rows.js";
+
+const near = (a, b, tol, msg) =>
+  assert.ok(Math.abs(a - b) <= tol, `${msg ?? ""} expected ${b} ±${tol}, got ${a}`);
+
+// --- geometry ---------------------------------------------------------------
+
+const cal = { rect: { x0: 10, y0: 100, x1: 210, y1: 300 }, rows: 20, firstRow: 1, bottomUp: true };
+
+test("row height and last row", () => {
+  assert.equal(rowHeight(cal), 10);
+  assert.equal(lastRow(cal), 20);
+});
+
+test("bottom-up numbering: row 1 at the bottom", () => {
+  assert.equal(rowAt(cal, 299), 1);
+  assert.equal(rowAt(cal, 291), 1);
+  assert.equal(rowAt(cal, 289), 2);
+  assert.equal(rowAt(cal, 101), 20);
+  assert.deepEqual(rowBand(cal, 1), { top: 290, bottom: 300 });
+  assert.deepEqual(rowBand(cal, 20), { top: 100, bottom: 110 });
+});
+
+test("top-down numbering and first row other than 1", () => {
+  const c = { ...cal, bottomUp: false, firstRow: 41 };
+  assert.equal(rowAt(c, 101), 41);
+  assert.equal(rowAt(c, 299), 60);
+  assert.deepEqual(rowBand(c, 41), { top: 100, bottom: 110 });
+  assert.equal(rowBand(c, 40), null);
+  assert.equal(rowBand(c, 61), null);
+});
+
+test("outside the grid is no row", () => {
+  assert.equal(rowAt(cal, 99), null);
+  assert.equal(rowAt(cal, 301), null);
+  assert.equal(rowAt(cal, 200, 5), null);
+  assert.equal(rowAt(cal, 200, 215), null);
+  assert.equal(rowAt(cal, 205, 100), 10);
+});
+
+test("band centre maps back to the same row for every row", () => {
+  for (let n = 1; n <= 20; n++) {
+    const b = rowBand(cal, n);
+    assert.equal(rowAt(cal, (b.top + b.bottom) / 2), n);
+  }
+});
+
+test("rectangle drawn in any direction is normalised", () => {
+  assert.deepEqual(normRect({ x: 50, y: 80 }, { x: 10, y: 20 }), { x0: 10, y0: 20, x1: 50, y1: 80 });
+});
+
+// --- detection on synthetic labels -------------------------------------------
+
+function label(n, x, y) { return { n, x, y, w: 4 }; }
+
+test("labels every 10th row on one side: rows start at 1", () => {
+  // Rows 1..60, pitch 5, row 1 centred at y=400, labels at the right.
+  const pts = [];
+  for (let n = 10; n <= 60; n += 10) pts.push(label(n, 300, 400 - (n - 1) * 5));
+  const c = detectCalibration(pts, 320, 450);
+  assert.ok(c);
+  assert.equal(c.firstRow, 1);
+  assert.equal(c.rows, 60);
+  assert.equal(c.bottomUp, true);
+  near(c.rect.y1, 402.5, 0.01);
+  near(c.rect.y0, 402.5 - 60 * 5, 0.01);
+  assert.ok(c.rect.x1 < 300, "grid ends before the label column");
+});
+
+test("top-down chart with labels on the left", () => {
+  const pts = [];
+  for (let n = 1; n <= 30; n++) pts.push(label(n, 8, 50 + (n - 1) * 4));
+  const c = detectCalibration(pts, 200, 200);
+  assert.equal(c.bottomUp, false);
+  assert.equal(c.firstRow, 1);
+  assert.equal(c.rows, 30);
+  near(c.rect.y0, 48, 0.01);
+  assert.ok(c.rect.x0 > 8);
+});
+
+test("a stray number in line with the rows is ignored", () => {
+  const pts = [];
+  for (let n = 1; n <= 30; n++) pts.push(label(n, 8, 200 - n * 4));
+  pts.push(label(31, 120, 200 - 31 * 4)); // e.g. a stitch number
+  const s = detectSequence(pts, "y");
+  assert.equal(s.nMax, 30);
+});
+
+test("no labels -> no calibration", () => {
+  assert.equal(detectCalibration([label(1, 10, 10), label(2, 10, 14)], 100, 100), null);
+});
+
+// --- detection on the real sample (skipped when the sample is absent) ---------
+
+const SAMPLE = fileURLToPath(new URL("../samples/scarf-m.pdf", import.meta.url));
+
+test("Stitch Fiddle sample: 226 rows, grid edges match the cells", { skip: !existsSync(SAMPLE) }, async () => {
+  const { getDocument } = await import("../node_modules/pdfjs-dist/legacy/build/pdf.mjs");
+  const task = getDocument({ data: new Uint8Array(readFileSync(SAMPLE)), verbosity: 0 });
+  const doc = await task.promise;
+  const page = await doc.getPage(1);
+  const vp = page.getViewport({ scale: 1 });
+  const tc = await page.getTextContent();
+  const c = detectCalibration(labelPoints(tc.items, vp.transform), vp.width, vp.height);
+  assert.ok(c, "calibration found");
+  assert.equal(c.firstRow, 1);
+  assert.equal(c.rows, 226);
+  assert.equal(c.bottomUp, true);
+  const h = rowHeight(c);
+  near(h, 2.386, 0.005, "row pitch");
+  // Cells in the PDF: top row's top edge at y_up=578.44, bottom row's bottom
+  // edge at y_up=41.57-2.386; page height 595, y flipped.
+  const tol = 0.1 * h;
+  near(c.rect.y0, 595 - 578.44, tol, "top edge");
+  near(c.rect.y1, 595 - (41.57 - 2.386), tol, "bottom edge");
+  near(c.rect.x0, 16.56, tol, "left edge");
+  near(c.rect.x1, 823.05 + 2.39, tol, "right edge");
+  await task.destroy();
+});

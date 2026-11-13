@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ряд за рядом</title>
+<meta name="description" content="Отмечайте провязанные ряды прямо на PDF-схеме. Всё хранится в вашем браузере.">
+<meta name="theme-color" content="#f6f1ea">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Library -------------------------------------------------------------->
+<section id="library" class="screen" hidden>
+  <header class="lib-head">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true"><use href="#yarn"/></svg>
+      <div>
+        <h1>Ряд за рядом</h1>
+        <p class="sub">Отмечайте провязанные ряды прямо на схеме</p>
+      </div>
+    </div>
+    <div class="lib-actions">
+      <button id="btn-restore" class="btn ghost" type="button">Восстановить из копии</button>
+      <button id="btn-add" class="btn primary" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Добавить схему
+      </button>
+    </div>
+  </header>
+
+  <div id="persist-note" class="note" hidden>
+    <strong>Чтобы схемы не потерялись.</strong>
+    Всё хранится только в этом браузере на этом компьютере.
+    <span id="persist-hint"></span>
+    И время от времени сохраняйте копию (в меню схемы «⋯»).
+    <button class="note-close" type="button" aria-label="Скрыть">×</button>
+  </div>
+
+  <div id="empty" class="empty" hidden>
+    <svg viewBox="0 0 48 48" aria-hidden="true"><use href="#yarn"/></svg>
+    <h2>Пока ни одной схемы</h2>
+    <p>Добавьте PDF со схемой — кнопкой выше или просто перетащите файл в это окно.</p>
+    <button class="btn primary" type="button" data-action="add">Выбрать PDF</button>
+  </div>
+
+  <ul id="cards" class="cards"></ul>
+  <p class="lib-foot">Схемы и отметки не покидают этот компьютер — приложение работает и без интернета.</p>
+</section>
+
+<!-- Chart viewer --------------------------------------------------------->
+<section id="viewer" class="screen" hidden>
+  <header class="bar">
+    <button id="btn-back" class="btn icon" type="button" title="К списку схем (Esc)" aria-label="К списку схем">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2 id="v-title" class="v-title"></h2>
+    <div id="pager" class="pager" hidden>
+      <button id="btn-prev-page" class="btn icon" type="button" title="Предыдущая страница (PageUp)" aria-label="Предыдущая страница"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span id="page-label"></span>
+      <button id="btn-next-page" class="btn icon" type="button" title="Следующая страница (PageDown)" aria-label="Следующая страница"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div class="zoom">
+      <button id="btn-zoom-out" class="btn icon" type="button" title="Уменьшить (−)" aria-label="Уменьшить"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="btn-fit" class="btn small" type="button" title="Весь лист (0)"><span id="zoom-label">100%</span></button>
+      <button id="btn-zoom-in" class="btn icon" type="button" title="Увеличить (+)" aria-label="Увеличить"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <button id="btn-calibrate" class="btn ghost small" type="button" title="Заново разметить ряды на схеме">Разметка</button>
+  </header>
+
+  <div class="v-body">
+    <div id="stage" class="stage" tabindex="0" aria-label="Схема">
+      <div id="world" class="world"></div>
+      <canvas id="sharp" class="layer"></canvas>
+      <canvas id="overlay" class="layer"></canvas>
+      <div id="hover-tag" class="hover-tag" hidden></div>
+      <div id="loading" class="loading" hidden><span class="spinner"></span><span id="loading-text">Открываю схему…</span></div>
+    </div>
+
+    <!-- Knitting panel -->
+    <aside id="knit-panel" class="panel">
+      <div class="progress-block">
+        <div class="progress-num"><span id="p-done">0</span><span class="of"> из <span id="p-total">0</span> рядов</span></div>
+        <div class="progress"><div id="p-bar" class="progress-fill"></div></div>
+        <div id="p-pct" class="pct">0%</div>
+      </div>
+
+      <button id="btn-next" class="btn next" type="button">
+        <span class="next-check">✓</span>
+        <span class="next-text">Ряд <b id="next-row">1</b> провязан</span>
+        <kbd>Пробел</kbd>
+      </button>
+      <div id="finished" class="finished" hidden>🎉 Все ряды провязаны!</div>
+
+      <div class="row-actions">
+        <button id="btn-undo" class="btn ghost" type="button" disabled>↶ Отменить <kbd>⌘Z</kbd></button>
+        <button id="btn-goto" class="btn ghost" type="button">К текущему ряду <kbd>C</kbd></button>
+      </div>
+
+      <label class="toggle">
+        <input id="chk-dim" type="checkbox">
+        <span>Приглушить остальное</span>
+      </label>
+
+      <details class="help">
+        <summary>Как отмечать</summary>
+        <ul>
+          <li><b>Пробел</b> или <b>Enter</b> — следующий ряд провязан.</li>
+          <li><b>Клик</b> по ряду — поставить или снять отметку.</li>
+          <li><b>Shift + клик</b> — отметить все ряды до этого.</li>
+          <li><b>⌘Z</b> или <b>Backspace</b> — отменить.</li>
+          <li>Масштаб — щипок на трекпаде, колесо мыши или <b>+</b>/<b>−</b>; <b>0</b> — весь лист.</li>
+          <li>Двигать схему — перетащить мышью или двумя пальцами.</li>
+        </ul>
+      </details>
+    </aside>
+
+    <!-- Calibration panel -->
+    <aside id="cal-panel" class="panel" hidden>
+      <div class="cal-step" id="cal-step"></div>
+      <h3 id="cal-title">Разметка рядов</h3>
+      <p id="cal-text" class="cal-text"></p>
+
+      <div id="cal-fields" class="cal-fields">
+        <label>Рядов в сетке <input id="cal-rows" type="number" min="1" max="5000" inputmode="numeric"></label>
+        <label>Номер первого ряда <input id="cal-first" type="number" min="0" max="5000" inputmode="numeric"></label>
+        <label class="toggle"><input id="cal-bottomup" type="checkbox"><span>Нумерация снизу вверх (первый ряд внизу)</span></label>
+      </div>
+
+      <div class="cal-buttons">
+        <button id="cal-ok" class="btn primary" type="button">Всё верно</button>
+        <button id="cal-redraw" class="btn ghost" type="button">Обвести заново</button>
+        <button id="cal-skip" class="btn ghost" type="button">На этой странице нет рядов</button>
+        <button id="cal-cancel" class="btn ghost" type="button" hidden>Отмена</button>
+      </div>
+      <p class="cal-hint">Увеличьте схему и проверьте края: зелёные линии должны лечь на линии сетки. Края рамки можно тянуть мышью.</p>
+    </aside>
+  </div>
+</section>
+
+<!-- Dialogs -->
+<dialog id="dlg" class="dlg">
+  <form method="dialog">
+    <h3 id="dlg-title"></h3>
+    <p id="dlg-text"></p>
+    <input id="dlg-input" type="text" hidden>
+    <div class="dlg-buttons">
+      <button value="cancel" class="btn ghost" id="dlg-cancel">Отмена</button>
+      <button value="ok" class="btn primary" id="dlg-ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="drop" class="drop" hidden><div>Отпустите PDF, чтобы добавить схему</div></div>
+<input id="file-pdf" type="file" accept="application/pdf,.pdf" multiple hidden>
+<input id="file-backup" type="file" accept=".json,application/json" hidden>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="yarn" viewBox="0 0 48 48">
+    <circle cx="24" cy="24" r="19" fill="#d9825b"/>
+    <path d="M9 17c9 3 21 3 30-1M6.5 25c11 4 24 4 35-1M9.5 33c9 3 20 3 29-1" fill="none" stroke="#f3c7ae" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M17 6.5c-4 10-4 24 1 35M28 5.5c5 11 5 25-1 37" fill="none" stroke="#b9603b" stroke-width="2" stroke-linecap="round"/>
+    <path d="M40 34c4 3 5 6 3 9" fill="none" stroke="#d9825b" stroke-width="2.4" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

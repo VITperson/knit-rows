@@ -1,0 +1,15 @@
+{
+  "name": "knit-rows",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mark knitted rows on PDF knitting charts, in the browser",
+  "type": "module",
+  "scripts": {
+    "vendor": "sh scripts/vendor.sh",
+    "test": "node --test tests/*.test.mjs",
+    "serve": "python3 -m http.server 8765"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "6.4.299"
+  }
+}
