@@ -104,6 +104,8 @@ const calibrator = new Calibrator(viewer, {
   onShow: (on) => {
     $("knit-panel").hidden = on;
     $("btn-calibrate").disabled = on;
+    $("btn-panel").disabled = on;
+    updateMini();
   },
   onDone: () => {
     viewer.ensureSpans();
@@ -139,7 +141,52 @@ function updatePanel() {
   }
   updateStitchBox(finished);
   updateStats();
+  updateMini();
 }
+
+// --- hiding the panel ----------------------------------------------------------------
+
+const PANEL_PREF = "knit-rows:panel";
+let panelOn = true;
+try { panelOn = localStorage.getItem(PANEL_PREF) !== "hidden"; } catch {}
+
+function setPanel(on) {
+  panelOn = on;
+  try { localStorage.setItem(PANEL_PREF, on ? "shown" : "hidden"); } catch {}
+  applyPanel();
+}
+
+function applyPanel() {
+  $("viewer").classList.toggle("panel-off", !panelOn);
+  const b = $("btn-panel");
+  b.setAttribute("aria-pressed", String(panelOn));
+  b.title = panelOn ? "Скрыть панель (P)" : "Показать панель (P)";
+  b.setAttribute("aria-label", panelOn ? "Скрыть панель" : "Показать панель");
+  updateMini();
+}
+
+// Progress and the "row done" button over the chart while the panel is hidden.
+function updateMini() {
+  const mini = $("mini");
+  const show = !panelOn && !!viewer.project && !calibrator.active;
+  mini.hidden = !show;
+  if (!show) return;
+  const { done, total, next } = viewer.progress();
+  mini.hidden = total === 0;
+  $("m-done").textContent = done;
+  $("m-total").textContent = total;
+  const finished = total > 0 && next == null;
+  $("btn-mini-next").hidden = finished;
+  $("m-finished").hidden = !finished;
+  $("m-next").textContent = next ?? "";
+  const info = viewer.stitchesOn() && !finished ? viewer.stitchInfo() : null;
+  $("m-st").hidden = !(info && info.span);
+  if (info && info.span) $("m-st").textContent = `петля ${info.k}/${info.total}`;
+}
+
+$("btn-panel").addEventListener("click", () => setPanel(!panelOn));
+$("btn-mini-next").addEventListener("click", () => { viewer.markNext(); updatePanel(); });
+applyPanel();
 
 // --- stitches in the current row ----------------------------------------------
 
@@ -412,6 +459,7 @@ document.addEventListener("keydown", (e) => {
   if (typing) return;
   if (!e.metaKey && !e.ctrlKey && !e.altKey) {
     if (e.code === "KeyF" && fsSupported) { e.preventDefault(); toggleFullscreen(); return; }
+    if (e.code === "KeyP" && !calibrator.active) { e.preventDefault(); setPanel(!panelOn); return; }
     if (e.code === "KeyL") {
       e.preventDefault();
       viewer.lens.setOn(!viewer.lens.on);

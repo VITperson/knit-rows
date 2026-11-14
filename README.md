@@ -29,7 +29,9 @@ offline.
 4. **Zoom and move** — pinch on the trackpad or the mouse wheel to zoom,
    drag or two-finger scroll to move, `+` / `−`, `0` for the whole page,
    `C` to jump to the current row. `F` (or the button at the top right) —
-   full screen.
+   full screen. `P` (or the panel button next to it) hides the side panel;
+   the progress and the "row done" button then sit in a small box over the
+   chart. The choice is remembered in this browser.
 5. **Stitches in a row** — "Считать петли в ряду" counts the stitches of the
    current row (the drawn cells of that row, so a shawl's first row has 5,
    not the width of the grid). Click a stitch — knitted up to it (click it

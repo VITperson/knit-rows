@@ -280,15 +280,23 @@ export class Viewer {
     this.anim = requestAnimationFrame(step);
   }
 
+  // The stage changed size (window resized, panel shown or hidden): keep the
+  // same spot in the middle at the same zoom; a whole-page view stays whole.
   onResize() {
+    const W = this.W, H = this.H;
+    if (!W || !H) return;
+    const oldW = this.lastW || W, oldH = this.lastH || H;
+    this.lastW = W;
+    this.lastH = H;
     if (!this.page) { this.requestDraw(); return; }
-    const cx = (this.W / 2 - this.v.tx) / this.v.z;
-    const cy = (this.H / 2 - this.v.ty) / this.v.z;
-    const rel = this.v.z / this.fitZ;
+    const atFit = Math.abs(this.v.z / this.fitZ - 1) < 0.02;
+    const cx = (oldW / 2 - this.v.tx) / this.v.z;
+    const cy = (oldH / 2 - this.v.ty) / this.v.z;
     this.computeFit();
-    this.v.z = clamp(rel * this.fitZ, this.zMin, this.zMax);
-    this.v.tx = this.W / 2 - cx * this.v.z;
-    this.v.ty = this.H / 2 - cy * this.v.z;
+    if (atFit) { this.fit(); return; }
+    this.v.z = clamp(this.v.z, this.zMin, this.zMax);
+    this.v.tx = W / 2 - cx * this.v.z;
+    this.v.ty = H / 2 - cy * this.v.z;
     this.applyView();
   }
 
