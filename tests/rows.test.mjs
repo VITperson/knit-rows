@@ -124,3 +124,95 @@ test("Stitch Fiddle sample: 226 rows, grid edges match the cells", { skip: !exis
   near(c.rect.x1, 823.05 + 2.39, tol, "right edge");
   await task.destroy();
 });
+
+// --- stitches inside a row ---------------------------------------------------------
+
+import {
+  colAt, colWidth, squareCols, rowStart, stitchCount, stitchCol, stitchIndex, knittedCols,
+  spanOf, cellInk, spansKey, rowSpan, startSides,
+} from "../js/rows.js";
+
+test("columns of the grid", () => {
+  const c = { ...cal, cols: 20 };
+  assert.equal(colWidth(c), 10);
+  assert.equal(colAt(c, 10), 0);
+  assert.equal(colAt(c, 19.9), 0);
+  assert.equal(colAt(c, 20), 1);
+  assert.equal(colAt(c, 210), 19);
+  assert.equal(colAt(c, 9), null);
+  assert.equal(squareCols(cal.rect, cal.rows), 20);
+});
+
+test("row direction: flat knitting alternates, labels decide", () => {
+  assert.equal(rowStart(null, 1), "right");
+  assert.equal(rowStart(null, 2), "left");
+  assert.equal(rowStart({ odd: "left", even: "right" }, 13), "left");
+  assert.equal(rowStart({ odd: "right", even: "right" }, 14), "right");
+});
+
+test("stitch order from either side", () => {
+  const span = [5, 9]; // 5 stitches in columns 5..9
+  assert.equal(stitchCount(span), 5);
+  assert.equal(stitchCount(null), 0);
+  assert.equal(stitchCol(span, "right", 0), 9);
+  assert.equal(stitchCol(span, "left", 0), 5);
+  assert.equal(stitchIndex(span, "right", 9), 0);
+  assert.equal(stitchIndex(span, "right", 5), 4);
+  assert.equal(stitchIndex(span, "left", 7), 2);
+  assert.equal(stitchIndex(span, "left", 2), 0, "a click left of the row snaps to its first stitch");
+  assert.deepEqual(knittedCols(span, "right", 2), [8, 10]);
+  assert.deepEqual(knittedCols(span, "left", 2), [5, 7]);
+  assert.deepEqual(knittedCols(span, "left", 0), [5, 5]);
+});
+
+test("a row's span is its first and last drawn cell", () => {
+  const filled = new Set([3, 4, 6, 8]);
+  assert.deepEqual(spanOf(12, (c) => filled.has(c)), [3, 8]);
+  assert.deepEqual(spanOf(12, (c) => c === 7), [7, 7]);
+  assert.equal(spanOf(12, () => false), null);
+});
+
+test("cell ink: symbols, colours and grey fills count, white does not", () => {
+  const W = 4, H = 4;
+  const img = (rgb) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) d.set([...rgb, 255], i * 4); return d; };
+  assert.equal(cellInk(img([255, 255, 255]), W, 0, 0, W, H), false);
+  assert.equal(cellInk(img([250, 248, 252]), W, 0, 0, W, H), false, "near white");
+  assert.equal(cellInk(img([167, 205, 209]), W, 0, 0, W, H), true, "pale teal");
+  assert.equal(cellInk(img([160, 160, 160]), W, 0, 0, W, H), true, "grey fill");
+  const sym = img([255, 255, 255]);
+  sym.set([20, 20, 20, 255], (1 * W + 2) * 4); // one dark pixel
+  assert.equal(cellInk(sym, W, 0, 0, W, H), true);
+  assert.equal(cellInk(sym, W, 0, 2, W, H), false, "outside the box");
+});
+
+test("stored spans are used only for the grid they were read from", () => {
+  const c = { ...cal, cols: 20 };
+  c.spans = Array.from({ length: 20 }, (_, k) => [10 - Math.floor(k / 2), 10 + Math.floor(k / 2)]);
+  c.spansKey = spansKey(c);
+  assert.deepEqual(rowSpan(c, 1), [10, 10]);
+  assert.deepEqual(rowSpan(c, 20), [1, 19]);
+  const moved = { ...c, rect: { ...c.rect, x1: 220 } };
+  assert.equal(rowSpan(moved, 1), undefined);
+  assert.equal(rowSpan({ ...cal }, 1), undefined, "old charts have no spans");
+});
+
+test("start sides from where odd and even numbers are printed", () => {
+  const L = (n) => ({ n, x: 5, y: 0, w: 4 }), R = (n) => ({ n, x: 300, y: 0, w: 4 });
+  assert.deepEqual(startSides([R(1), L(2), R(3), L(4)], 150), { odd: "right", even: "left" });
+  assert.deepEqual(startSides([R(1), R(2), R(3), R(4)], 150), { odd: "right", even: "right" });
+  assert.equal(startSides([R(10), R(20), R(30)], 150), null, "only even numbers: unknown");
+});
+
+test("Stitch Fiddle sample: 339 stitches across, row sides from the labels", { skip: !existsSync(SAMPLE) }, async () => {
+  const { getDocument } = await import("../node_modules/pdfjs-dist/legacy/build/pdf.mjs");
+  const task = getDocument({ data: new Uint8Array(readFileSync(SAMPLE)), verbosity: 0 });
+  const doc = await task.promise;
+  const page = await doc.getPage(1);
+  const vp = page.getViewport({ scale: 1 });
+  const tc = await page.getTextContent();
+  const c = detectCalibration(labelPoints(tc.items, vp.transform), vp.width, vp.height);
+  assert.equal(c.cols, 339);
+  near(colWidth(c), rowHeight(c), 0.01, "square cells");
+  assert.deepEqual(c.start, { odd: "left", even: "right" });
+  await task.destroy();
+});

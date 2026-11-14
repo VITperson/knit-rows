@@ -5,13 +5,107 @@
 // right, y DOWN, origin at the top-left corner of the rendered page.
 //
 // A calibration describes one chart grid on one page:
-//   { rect: {x0, y0, x1, y1}, rows, firstRow, bottomUp }
+//   { rect: {x0, y0, x1, y1}, rows, firstRow, bottomUp,
+//     cols?, start?, spans?, spansKey? }
 // rect is the outer border of the grid, rows is the number of rows inside it,
 // firstRow is the number of the row next to the starting edge, bottomUp says
 // the numbering grows upwards (the usual knitting-chart convention).
+// cols is the number of cells across; start says on which side odd and even
+// rows begin ({odd, even}: "left" | "right", from where the row numbers are
+// printed); spans[k] is the [first, last] column that holds a stitch in the
+// k-th row from firstRow (read from the rendered page), null for an empty row.
+// The optional fields were added later: older saved charts lack them.
+
+export const DEFAULT_START = { odd: "right", even: "left" };
 
 export function rowHeight(cal) {
   return (cal.rect.y1 - cal.rect.y0) / cal.rows;
+}
+
+export function colWidth(cal) {
+  return (cal.rect.x1 - cal.rect.x0) / cal.cols;
+}
+
+// Column (0 = leftmost) at page-x, or null outside the grid.
+export function colAt(cal, x) {
+  if (!cal.cols || x < cal.rect.x0 || x > cal.rect.x1) return null;
+  return Math.min(cal.cols - 1, Math.max(0, Math.floor((x - cal.rect.x0) / colWidth(cal))));
+}
+
+// Cells across for a grid whose stitch numbers were not found: square cells.
+export function squareCols(rect, rows) {
+  const h = (rect.y1 - rect.y0) / rows;
+  return Math.max(1, Math.round((rect.x1 - rect.x0) / h));
+}
+
+// Side where row n begins.
+export function rowStart(start, n) {
+  const s = start || DEFAULT_START;
+  return Math.abs(n) % 2 === 1 ? s.odd : s.even;
+}
+
+// --- stitches inside a row ----------------------------------------------------
+// A row's stitches are the columns span[0]..span[1]; they are knitted from the
+// row's start side. k = stitches already knitted.
+
+export function stitchCount(span) {
+  return span ? span[1] - span[0] + 1 : 0;
+}
+
+// Column of the i-th stitch (0-based) in knitting order.
+export function stitchCol(span, side, i) {
+  return side === "left" ? span[0] + i : span[1] - i;
+}
+
+// Knitting-order index of the stitch in column c (snapped into the row).
+export function stitchIndex(span, side, c) {
+  const cc = Math.min(span[1], Math.max(span[0], c));
+  return side === "left" ? cc - span[0] : span[1] - cc;
+}
+
+// Columns [from, to) covered by the first k stitches.
+export function knittedCols(span, side, k) {
+  return side === "left" ? [span[0], span[0] + k] : [span[1] + 1 - k, span[1] + 1];
+}
+
+// First and last column of a row that hold a stitch. isFilled(c) -> bool.
+export function spanOf(cols, isFilled) {
+  let a = -1;
+  for (let c = 0; c < cols; c++) if (isFilled(c)) { a = c; break; }
+  if (a < 0) return null;
+  let b = a;
+  for (let c = cols - 1; c > a; c--) if (isFilled(c)) { b = c; break; }
+  return [a, b];
+}
+
+// Is anything drawn inside a cell? data: RGBA pixels of an image `width`
+// wide; the box (x0, y0)-(x1, y1) is the inside of the cell without its grid
+// lines. A dark symbol, a coloured cell or a grey fill counts; white does not.
+export function cellInk(data, width, x0, y0, x1, y1) {
+  let sum = 0, count = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * width + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mx < 110 || mx - mn > 45) return true;
+      sum += mx;
+      count++;
+    }
+  }
+  return count > 0 && sum / count < 215;
+}
+
+export function spansKey(cal) {
+  const r = cal.rect;
+  return [cal.rows, cal.firstRow, cal.cols, r.x0, r.y0, r.x1, r.y1].map((v) => Math.round(v * 100)).join(",");
+}
+
+// Span of row n, or undefined when not known (yet).
+export function rowSpan(cal, n) {
+  if (!cal || !cal.spans || cal.spansKey !== spansKey(cal)) return undefined;
+  const s = cal.spans[n - cal.firstRow];
+  return s === undefined ? undefined : s;
 }
 
 export function lastRow(cal) {
@@ -196,6 +290,7 @@ export function detectCalibration(points, pageWidth, pageHeight) {
 
   let x0 = 0, x1 = pageWidth;
   let open = null; // a side of the grid we could not locate from text
+  let colCount = null;
   // Stitch numbers along x give the exact width of the grid.
   const stitchPts = points.filter((q) => q.y < y0 + pitch || q.y > y1 - pitch);
   const cols = detectSequence(stitchPts, "x");
@@ -205,6 +300,7 @@ export function detectCalibration(points, pageWidth, pageHeight) {
     const xb = cols.c + cols.p * cols.nMax;
     x0 = Math.min(xa, xb) - Math.abs(cols.p) / 2;
     x1 = Math.max(xa, xb) + Math.abs(cols.p) / 2;
+    colCount = cols.nMax - cf + 1;
   } else {
     // Otherwise the grid sits between the row-label columns.
     const xs = rows.inliers.map((q) => q.x);
@@ -224,14 +320,33 @@ export function detectCalibration(points, pageWidth, pageHeight) {
       open = "right";
     }
   }
+  const rect = { x0, y0, x1, y1 };
+  const rowCount = last - first + 1;
   return {
-    rect: { x0, y0, x1, y1 },
-    rows: last - first + 1,
+    rect,
+    rows: rowCount,
     firstRow: first,
     bottomUp: rows.p < 0,
+    cols: colCount ?? squareCols(rect, rowCount),
+    start: startSides(rows.inliers, (x0 + x1) / 2),
     auto: true,
     ...(open ? { open } : {}),
   };
+}
+
+// Charts print a row's number on the side where the row begins. Both odd and
+// even numbers must be seen to tell flat knitting from knitting in the round.
+export function startSides(labels, midX) {
+  const side = (odd) => {
+    const xs = labels.filter((q) => (q.n % 2 === 1) === odd).map((q) => q.x);
+    if (!xs.length) return null;
+    const left = xs.filter((x) => x < midX).length;
+    if (left > xs.length * 0.8) return "left";
+    if (left < xs.length * 0.2) return "right";
+    return null;
+  };
+  const odd = side(true), even = side(false);
+  return odd && even ? { odd, even } : null;
 }
 
 // ---------------------------------------------------------------------------

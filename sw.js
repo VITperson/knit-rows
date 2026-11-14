@@ -1,6 +1,6 @@
 // Offline support. App files: network first (so updates arrive), cache as a
 // fallback. pdf.js in vendor/: cache first (it changes only with the version).
-const CACHE = "knit-rows-v1";
+const CACHE = "knit-rows-v2";
 const SHELL = [
   "./",
   "index.html",
@@ -13,6 +13,8 @@ const SHELL = [
   "js/rows.js",
   "js/overlay.js",
   "js/calibrate.js",
+  "js/stats.js",
+  "js/lens.js",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-180.png",

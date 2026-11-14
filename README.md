@@ -25,7 +25,21 @@ offline.
    everything except the current row.
 4. **Zoom and move** — pinch on the trackpad or the mouse wheel to zoom,
    drag or two-finger scroll to move, `+` / `−`, `0` for the whole page,
-   `C` to jump to the current row.
+   `C` to jump to the current row. `F` (or the button at the top right) —
+   full screen.
+5. **Stitches in a row** — "Считать петли в ряду" counts the stitches of the
+   current row (the drawn cells of that row, so a shawl's first row has 5,
+   not the width of the grid). Click a stitch — knitted up to it (click it
+   again to take it back); `←` / `→` move the marker a stitch, with `Shift`
+   ten. The row's direction comes from the side its number is printed on;
+   the arrow button in the panel flips it for all odd or all even rows.
+6. **Magnifier** — "Лупа" or `L`: a round lens under the pointer, ×2 / ×4 /
+   ×8 of the current zoom.
+7. **Statistics** — from the first row marked with this version on: rows
+   today and this week, speed, time left in the current row and in the
+   chart, and an estimated finish date. Speed and the forecast are in
+   stitches when every row's stitches are known (a triangle's rows differ a
+   lot), otherwise in rows. Pauses over 90 minutes count as breaks.
 
 ### Keep the data safe
 
@@ -46,7 +60,15 @@ file with the PDF and the marks; "Восстановить из копии" brin
   stitch numbers along the top/bottom give the grid width. A grid is stored
   per page as `{rect, rows, firstRow, bottomUp}` in page units.
 - Marks are stored by row number per chart, so a row repeated on two pages is
-  marked on both.
+  marked on both. `doneAt` keeps when each row was marked (for statistics).
+- Stitches (`js/rows.js`): a grid also has `cols` (from the stitch numbers,
+  or square cells) and `start` (which side odd and even rows begin, from
+  where the row numbers stand). `spans` — the first and last drawn cell of
+  every row — are read from the rendered page and cached with the chart.
+- Statistics are pure functions in `js/stats.js`.
+- Compatibility: charts saved by an older version have none of these fields;
+  they are added on opening and nothing existing is changed. The IndexedDB
+  name and version stay the same.
 
 ## Development
 

@@ -1,5 +1,5 @@
 // Draws the row marks on top of the chart, in screen space.
-import { rowAt, rowBand, rowHeight, lastRow } from "./rows.js";
+import { rowAt, rowBand, rowHeight, lastRow, colWidth, stitchCount, stitchCol, knittedCols } from "./rows.js";
 
 const DONE_FILL = "rgba(47, 138, 85, 0.30)";
 const DONE_INK = "#2f8a55";
@@ -40,7 +40,7 @@ function runs(rows) {
 }
 
 export function drawKnit(ctx, v, cal, s) {
-  // s: {done:Set, current, hover, dim}
+  // s: {done:Set, current, hover, dim, stitch?: {span, side, k}, labels?}
   if (!cal) return;
   const { x0, x1 } = cal.rect;
   const L = sx(v, x0), R = sx(v, x1);
@@ -116,15 +116,62 @@ export function drawKnit(ctx, v, cal, s) {
     ctx.lineWidth = 2;
     ctx.strokeStyle = CURRENT;
     ctx.strokeRect(L - 2, top - 2, R - L + 4, bottom - top + 4);
+    const st = s.stitch && s.stitch.span && cal.cols ? s.stitch : null;
+    if (st) drawStitches(ctx, v, cal, top, bottom, st);
     const cy = (top + bottom) / 2;
-    if (cy > -20 && cy < v.h + 20) {
-      const label = `ряд ${s.current}`;
+    if (s.labels !== false && cy > -20 && cy < v.h + 20) {
+      const label = st ? `ряд ${s.current} · ${st.k}/${stitchCount(st.span)}` : `ряд ${s.current}`;
       const lx = Math.max(4, L - 8);
       if (L - 8 > 70) pill(ctx, label, lx, cy, "right", CURRENT, "#fff");
       else pill(ctx, label, Math.max(4, L + 4), cy, "left", CURRENT, "#fff");
       const rx = Math.min(v.w - 4, R + 8);
       if (v.w - R - 8 > 70) pill(ctx, label, rx, cy, "left", CURRENT, "#fff");
     }
+  }
+}
+
+// Stitch marker in the current row: knitted stitches shaded, the next stitch
+// framed, a pointer above and below the row where knitting stopped.
+function drawStitches(ctx, v, cal, top, bottom, st) {
+  const { span, side, k } = st;
+  const total = stitchCount(span);
+  const cw = colWidth(cal);
+  const xOf = (c) => sx(v, cal.rect.x0 + c * cw);
+  const h = bottom - top;
+  if (k > 0) {
+    const [a, b] = knittedCols(span, side, k);
+    ctx.fillStyle = "rgba(255, 90, 31, 0.30)";
+    ctx.fillRect(xOf(a), top, xOf(b) - xOf(a), h);
+  }
+  if (k < total) {
+    const c = stitchCol(span, side, k);
+    const x = xOf(c), w = xOf(c + 1) - x;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#2f2722";
+    ctx.strokeRect(x - 1, top - 1, w + 2, h + 2);
+  }
+  // Boundary between knitted and not yet knitted stitches.
+  const [a, b] = knittedCols(span, side, k);
+  const bx = side === "left" ? xOf(b) : xOf(a);
+  const arm = Math.max(10, h * 0.9);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(bx, top - arm);
+  ctx.lineTo(bx, bottom + arm);
+  ctx.stroke();
+  ctx.strokeStyle = CURRENT;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  const t = 7;
+  ctx.fillStyle = CURRENT;
+  for (const [y, dir] of [[top - arm, -1], [bottom + arm, 1]]) {
+    ctx.beginPath();
+    ctx.moveTo(bx, y + dir * -1);
+    ctx.lineTo(bx - t, y + dir * t * 1.3);
+    ctx.lineTo(bx + t, y + dir * t * 1.3);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 
@@ -140,6 +187,22 @@ export function drawCalibration(ctx, v, draft) {
   ctx.rect(0, 0, v.w, v.h);
   ctx.rect(L, T, R - L, B - T);
   ctx.fill("evenodd");
+
+  // Columns, once they are big enough to check against the cells.
+  if (draft.cols > 0 && (R - L) / draft.cols >= 6) {
+    const cw = (R - L) / draft.cols;
+    const kL = Math.max(1, Math.floor((0 - L) / cw));
+    const kR = Math.min(draft.cols - 1, Math.ceil((v.w - L) / cw));
+    ctx.strokeStyle = "rgba(31, 157, 85, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let k = kL; k <= kR; k++) {
+      const x = Math.round(L + k * cw) + 0.5;
+      ctx.moveTo(x, Math.max(T, 0));
+      ctx.lineTo(x, Math.min(B, v.h));
+    }
+    ctx.stroke();
+  }
 
   const n = draft.rows;
   if (n > 0) {

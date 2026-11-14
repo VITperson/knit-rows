@@ -69,6 +69,10 @@
       <button id="btn-zoom-in" class="btn icon" type="button" title="Увеличить (+)" aria-label="Увеличить"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
     <button id="btn-calibrate" class="btn ghost small" type="button" title="Заново разметить ряды на схеме">Разметка</button>
+    <button id="btn-fs" class="btn icon" type="button" title="Во весь экран (F)" aria-label="Во весь экран">
+      <svg id="fs-enter" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+      <svg id="fs-exit" viewBox="0 0 24 24" hidden><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
+    </button>
   </header>
 
   <div class="v-body">
@@ -76,6 +80,7 @@
       <div id="world" class="world"></div>
       <canvas id="sharp" class="layer"></canvas>
       <canvas id="overlay" class="layer"></canvas>
+      <canvas id="lens" class="lens" hidden></canvas>
       <div id="hover-tag" class="hover-tag" hidden></div>
       <div id="loading" class="loading" hidden><span class="spinner"></span><span id="loading-text">Открываю схему…</span></div>
     </div>
@@ -86,6 +91,7 @@
         <div class="progress-num"><span id="p-done">0</span><span class="of"> из <span id="p-total">0</span> рядов</span></div>
         <div class="progress"><div id="p-bar" class="progress-fill"></div></div>
         <div id="p-pct" class="pct">0%</div>
+        <div id="p-sts" class="pct" hidden></div>
       </div>
 
       <button id="btn-next" class="btn next" type="button">
@@ -95,15 +101,63 @@
       </button>
       <div id="finished" class="finished" hidden>🎉 Все ряды провязаны!</div>
 
+      <section id="stitch-box" class="stitch-box" hidden aria-label="Петли текущего ряда">
+        <div class="stitch-head">
+          <span>Петли ряда <b id="s-row"></b></span>
+          <button id="btn-dir" class="btn ghost small" type="button" title="С какой стороны начинается этот ряд. Нажмите, если наоборот: поменяется для всех чётных или всех нечётных рядов."></button>
+        </div>
+        <div id="s-count">
+          <div class="stitch-line">
+            <div class="stitch-num"><b id="s-k">0</b> из <span id="s-total">0</span></div>
+            <div id="s-steps" class="stitch-steps">
+              <button id="btn-st-back" class="btn" type="button" title="Назад на петлю">−1</button>
+              <button id="btn-st-fwd" class="btn" type="button" title="Вперёд на петлю">+1</button>
+              <button id="btn-st-fwd10" class="btn" type="button" title="Вперёд на 10 петель">+10</button>
+            </div>
+          </div>
+          <div class="progress thin"><div id="s-bar" class="progress-fill stitch-fill"></div></div>
+          <div id="s-left" class="pct"></div>
+        </div>
+        <p id="s-wait" class="stitch-hint" hidden></p>
+        <p class="stitch-hint">Клик по петле — «провязано досюда», <b>←</b> <b>→</b> — на петлю, с <b>Shift</b> — на 10.</p>
+      </section>
+
       <div class="row-actions">
         <button id="btn-undo" class="btn ghost" type="button" disabled>↶ Отменить <kbd>⌘Z</kbd></button>
         <button id="btn-goto" class="btn ghost" type="button">К текущему ряду <kbd>C</kbd></button>
       </div>
 
-      <label class="toggle">
-        <input id="chk-dim" type="checkbox">
-        <span>Приглушить остальное</span>
-      </label>
+      <div class="toggles">
+        <label class="toggle">
+          <input id="chk-dim" type="checkbox">
+          <span>Приглушить остальное</span>
+        </label>
+        <label class="toggle">
+          <input id="chk-stitches" type="checkbox">
+          <span>Считать петли в ряду</span>
+        </label>
+        <div class="toggle-row">
+          <label class="toggle">
+            <input id="chk-lens" type="checkbox">
+            <span>Лупа <kbd>L</kbd></span>
+          </label>
+          <div id="lens-mag" class="seg" role="group" aria-label="Увеличение лупы" hidden>
+            <button type="button" data-mag="2">×2</button>
+            <button type="button" data-mag="4">×4</button>
+            <button type="button" data-mag="8">×8</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="stats" class="stats" hidden>
+        <h4>Статистика</h4>
+        <p id="stats-empty" class="stats-empty">Здесь появятся темп и прогноз. Время отмечается с каждым провязанным рядом — просто вяжите и отмечайте, как обычно.</p>
+        <dl id="stats-list"></dl>
+        <div id="stats-days" class="stats-days" hidden>
+          <div class="days-head"><span>Рядов в день, 2 недели</span><span id="stats-max"></span></div>
+          <div id="stats-bars" class="bars"></div>
+        </div>
+      </section>
 
       <details class="help">
         <summary>Как отмечать</summary>
@@ -112,6 +166,8 @@
           <li><b>Клик</b> по ряду — поставить или снять отметку.</li>
           <li><b>Shift + клик</b> — отметить все ряды до этого.</li>
           <li><b>⌘Z</b> или <b>Backspace</b> — отменить.</li>
+          <li><b>Считать петли</b>: клик по петле текущего ряда отмечает, докуда он провязан; <b>←</b>/<b>→</b> — на петлю, с <b>Shift</b> — на 10.</li>
+          <li><b>L</b> — лупа под курсором, <b>F</b> — во весь экран.</li>
           <li>Масштаб — щипок на трекпаде, колесо мыши или <b>+</b>/<b>−</b>; <b>0</b> — весь лист.</li>
           <li>Двигать схему — перетащить мышью или двумя пальцами.</li>
         </ul>
@@ -127,6 +183,7 @@
       <div id="cal-fields" class="cal-fields">
         <label>Рядов в сетке <input id="cal-rows" type="number" min="1" max="5000" inputmode="numeric"></label>
         <label>Номер первого ряда <input id="cal-first" type="number" min="0" max="5000" inputmode="numeric"></label>
+        <label>Клеток в ширину <input id="cal-cols" type="number" min="1" max="5000" inputmode="numeric"></label>
         <label class="toggle"><input id="cal-bottomup" type="checkbox"><span>Нумерация снизу вверх (первый ряд внизу)</span></label>
       </div>
 

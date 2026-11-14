@@ -1,4 +1,6 @@
 // Row-calibration wizard: confirm auto-detected rows or frame the grid by hand.
+import { squareCols } from "./rows.js";
+
 const $ = (id) => document.getElementById(id);
 
 export class Calibrator {
@@ -9,11 +11,19 @@ export class Calibrator {
     this.single = false;
     this.el = {
       panel: $("cal-panel"), step: $("cal-step"), title: $("cal-title"), text: $("cal-text"),
-      rows: $("cal-rows"), first: $("cal-first"), bottomUp: $("cal-bottomup"),
+      rows: $("cal-rows"), first: $("cal-first"), cols: $("cal-cols"), bottomUp: $("cal-bottomup"),
       ok: $("cal-ok"), redraw: $("cal-redraw"), skip: $("cal-skip"), cancel: $("cal-cancel"),
     };
     const e = this.el;
     for (const inp of [e.rows, e.first]) inp.addEventListener("input", () => this.fromFields());
+    e.cols.addEventListener("input", () => {
+      const c = parseInt(e.cols.value, 10);
+      this.draft.cols = c > 0 ? Math.min(c, 5000) : null;
+      this.colsEdited = true;
+      this.edited = true;
+      this.viewer.requestDraw();
+      this.render();
+    });
     e.bottomUp.addEventListener("change", () => this.fromFields());
     e.ok.addEventListener("click", () => this.confirm());
     e.redraw.addEventListener("click", () => this.redraw());
@@ -54,8 +64,9 @@ export class Calibrator {
     const cal = info.cal;
     this.original = info.cal ? JSON.parse(JSON.stringify(info.cal)) : null;
     this.draft = cal
-      ? { rect: { ...cal.rect }, rows: cal.rows, firstRow: cal.firstRow, bottomUp: cal.bottomUp, auto: !!cal.auto }
-      : { rect: null, rows: null, firstRow: 1, bottomUp: true, auto: false };
+      ? { rect: { ...cal.rect }, rows: cal.rows, firstRow: cal.firstRow, bottomUp: cal.bottomUp, auto: !!cal.auto, cols: cal.cols || null }
+      : { rect: null, rows: null, firstRow: 1, bottomUp: true, auto: false, cols: null };
+    this.colsEdited = !!(cal && cal.cols);
     // Row numbers on one side only: find the other edge of the grid on the page.
     if (cal && cal.auto && cal.open) {
       const ext = v.inkExtent(this.draft.rect);
@@ -89,6 +100,9 @@ export class Calibrator {
       e.title.textContent = "Проверьте разметку";
       e.text.textContent = "Края рамки можно подвинуть мышью. Зелёные линии должны лечь на линии рядов по всей высоте схемы.";
     }
+    // Cells across: from the stitch numbers, or square cells until typed in.
+    if (!this.colsEdited && hasRect && d.rows >= 1) d.cols = squareCols(d.rect, d.rows);
+    if (document.activeElement !== e.cols) e.cols.value = d.cols ?? "";
     if (document.activeElement !== e.rows) e.rows.value = d.rows ?? "";
     if (document.activeElement !== e.first) e.first.value = d.firstRow ?? 1;
     e.bottomUp.checked = !!d.bottomUp;
@@ -112,6 +126,7 @@ export class Calibrator {
 
   redraw() {
     this.draft.rect = null;
+    this.colsEdited = false;
     this.edited = true;
     this.viewer.beginRedraw();
     this.viewer.requestDraw();
@@ -128,11 +143,12 @@ export class Calibrator {
   confirm() {
     const d = this.draft;
     if (!d.rect || !(d.rows >= 1)) return;
-    this.saveCurrent({
-      cal: { rect: { ...d.rect }, rows: d.rows, firstRow: d.firstRow, bottomUp: !!d.bottomUp, auto: d.auto && !this.edited },
-      skip: false,
-      confirmed: true,
-    });
+    const cal = { rect: { ...d.rect }, rows: d.rows, firstRow: d.firstRow, bottomUp: !!d.bottomUp, auto: d.auto && !this.edited };
+    cal.cols = d.cols > 0 ? d.cols : squareCols(d.rect, d.rows);
+    cal.start = this.original && "start" in this.original ? this.original.start : null;
+    // Stitches read from the page stay valid while the grid is unchanged.
+    if (this.original && this.original.spans) { cal.spans = this.original.spans; cal.spansKey = this.original.spansKey; }
+    this.saveCurrent({ cal, skip: false, confirmed: true });
     this.edited = false;
     this.next();
   }
