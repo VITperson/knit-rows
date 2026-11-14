@@ -4,6 +4,7 @@ import { Library, saveBackup } from "./library.js";
 import { Viewer } from "./viewer.js";
 import { Calibrator, plural } from "./calibrate.js";
 import { knitStats } from "./stats.js";
+import { rangesText } from "./rows.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -131,6 +132,11 @@ function updatePanel() {
   $("btn-undo").disabled = !viewer.canUndo();
   $("chk-dim").checked = !!viewer.project.dim;
   $("chk-stitches").checked = viewer.stitchesOn();
+  const gaps = viewer.gaps();
+  $("gap-note").hidden = !gaps.length;
+  if (gaps.length) {
+    $("gap-text").textContent = `Не отмечены ${gaps.length === 1 ? "ряд" : "ряды"} ${rangesText(gaps)}`;
+  }
   updateStitchBox(finished);
   updateStats();
 }
@@ -378,6 +384,7 @@ $("btn-next-page").addEventListener("click", () => viewer.gotoPage(viewer.pageIn
 $("btn-calibrate").addEventListener("click", () => calibrator.startCurrent());
 $("btn-next").addEventListener("click", () => viewer.markNext());
 $("btn-undo").addEventListener("click", () => viewer.undoLast());
+$("btn-fill-gaps").addEventListener("click", () => viewer.fillGaps());
 $("btn-goto").addEventListener("click", () => viewer.centerRow());
 $("chk-dim").addEventListener("change", (e) => {
   viewer.setDim(e.target.checked);

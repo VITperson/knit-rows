@@ -284,3 +284,11 @@ kbd {
 .bars .day span { display: block; width: 100%; border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--done) 55%, white); }
 .bars .day.today span { background: var(--done); }
 .bars .day:hover span { background: var(--primary); }
+
+.gap-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 8px 8px 12px; margin-top: -4px;
+  border: 1px solid #ecd3a8; border-radius: 12px;
+  background: #fff6e6; color: #5b4421; font-size: 13.5px;
+}
+.gap-note .btn { flex: none; min-height: 30px; }

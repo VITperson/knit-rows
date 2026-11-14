@@ -1,7 +1,7 @@
 // The chart viewer: pan and zoom, crisp rendering, row marks.
 import { openPdf, pageSize, baseScaleFor, renderPage, renderRegion, isCancel, detectPage } from "./render.js";
 import {
-  rowAt, rowBand, rowHeight, hasRow, normRect, allRowsOf,
+  rowAt, rowBand, rowHeight, hasRow, normRect, allRowsOf, clickPlan, gapsOf, rangesText,
   colWidth, colAt, squareCols, rowStart, DEFAULT_START, spanOf, cellInk, spansKey, rowSpan,
   stitchCount, stitchIndex, knittedCols,
 } from "./rows.js";
@@ -595,11 +595,32 @@ export class Viewer {
     this.commit();
   }
 
-  markUpTo(n) {
+  // Click on a row: knitted up to here (see clickPlan).
+  clickRow(n) {
+    const { add, remove } = clickPlan(this.allRows(), this.doneSet, n);
+    if (!add.length && !remove.length) return;
     this.pushUndo();
-    for (const r of this.allRows()) {
-      if (r <= n && !this.doneSet.has(r)) { this.doneSet.add(r); this.stamp(r); }
+    for (const r of add) { this.doneSet.add(r); this.stamp(r); }
+    for (const r of remove) { this.doneSet.delete(r); delete this.doneAt[r]; }
+    this.commit();
+    const undo = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘Z" : "Ctrl+Z";
+    if (remove.length > 1) {
+      this.hooks.toast?.(`Сняты отметки с рядов ${rangesText(remove)} — ${undo}, чтобы вернуть`, 5000);
+    } else if (add.length > 1) {
+      this.hooks.toast?.(`Отмечены ряды ${rangesText(add)}`);
     }
+  }
+
+  // Rows left unmarked below the last knitted one (from older versions or
+  // Shift+click).
+  gaps() { return gapsOf(this.allRows(), this.doneSet); }
+
+  // Mark the gaps. Their time is unknown, so they are not timed.
+  fillGaps() {
+    const gaps = this.gaps();
+    if (!gaps.length) return;
+    this.pushUndo();
+    for (const r of gaps) this.doneSet.add(r);
     this.commit();
   }
 
@@ -899,8 +920,8 @@ export class Viewer {
         const onStitch = !e.shiftKey && this.stitchesOn() && n === this.nextRow() && cal.cols &&
           this.clickStitch(colAt(cal, q.x));
         if (onStitch) { /* marker moved */ }
-        else if (e.shiftKey) this.markUpTo(n);
-        else this.toggleRow(n);
+        else if (e.shiftKey) this.toggleRow(n);
+        else this.clickRow(n);
       }
     }
     this.updateHover(this.local(e));

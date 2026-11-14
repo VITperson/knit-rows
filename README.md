@@ -20,9 +20,12 @@ offline.
    The frame edges can be dragged. A page without rows (a legend) can be
    skipped. Multi-page charts are set up page by page.
 3. **Knitting** — `Space` / `Enter` marks the current row as knitted and
-   moves on; click a row to mark or unmark it; `Shift`+click marks every row
-   up to that one; `⌘Z` / `Backspace` undoes. "Приглушить остальное" dims
-   everything except the current row.
+   moves on. A click on a row means "knitted up to here": that row and every
+   row before it are marked; a click on the last marked row takes it back, a
+   click on an earlier marked row goes back to it. `Shift`+click marks or
+   unmarks that one row only. `⌘Z` / `Backspace` undoes. Rows left unmarked
+   below the last knitted one are listed in the panel with a button to mark
+   them. "Приглушить остальное" dims everything except the current row.
 4. **Zoom and move** — pinch on the trackpad or the mouse wheel to zoom,
    drag or two-finger scroll to move, `+` / `−`, `0` for the whole page,
    `C` to jump to the current row. `F` (or the button at the top right) —

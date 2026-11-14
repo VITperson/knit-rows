@@ -94,6 +94,11 @@
         <div id="p-sts" class="pct" hidden></div>
       </div>
 
+      <div id="gap-note" class="gap-note" hidden>
+        <span id="gap-text"></span>
+        <button id="btn-fill-gaps" class="btn small" type="button" title="Отметить пропущенные ряды провязанными">Отметить</button>
+      </div>
+
       <button id="btn-next" class="btn next" type="button">
         <span class="next-check">✓</span>
         <span class="next-text">Ряд <b id="next-row">1</b> провязан</span>
@@ -163,8 +168,8 @@
         <summary>Как отмечать</summary>
         <ul>
           <li><b>Пробел</b> или <b>Enter</b> — следующий ряд провязан.</li>
-          <li><b>Клик</b> по ряду — поставить или снять отметку.</li>
-          <li><b>Shift + клик</b> — отметить все ряды до этого.</li>
+          <li><b>Клик</b> по ряду — провязано до него включительно (все ряды ниже тоже отмечаются). Клик по последнему отмеченному ряду снимает отметку.</li>
+          <li><b>Shift + клик</b> — отметить или снять только этот ряд.</li>
           <li><b>⌘Z</b> или <b>Backspace</b> — отменить.</li>
           <li><b>Считать петли</b>: клик по петле текущего ряда отмечает, докуда он провязан; <b>←</b>/<b>→</b> — на петлю, с <b>Shift</b> — на 10.</li>
           <li><b>L</b> — лупа под курсором, <b>F</b> — во весь экран.</li>

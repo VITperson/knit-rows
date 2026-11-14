@@ -216,3 +216,57 @@ test("Stitch Fiddle sample: 339 stitches across, row sides from the labels", { s
   assert.deepEqual(c.start, { odd: "left", even: "right" });
   await task.destroy();
 });
+
+// --- clicking a row: knitted up to here ------------------------------------------
+
+import { clickPlan, gapsOf, rangesText } from "../js/rows.js";
+
+const R = Array.from({ length: 100 }, (_, i) => i + 1);
+const upTo = (n) => new Set(R.filter((r) => r <= n));
+
+test("click on a row ahead marks every row up to it", () => {
+  const p = clickPlan(R, upTo(57), 77);
+  assert.deepEqual(p.add, R.filter((r) => r >= 58 && r <= 77));
+  assert.deepEqual(p.remove, []);
+});
+
+test("click on the current row marks just it", () => {
+  assert.deepEqual(clickPlan(R, upTo(57), 58), { add: [58], remove: [] });
+});
+
+test("click on the last knitted row takes only it back", () => {
+  assert.deepEqual(clickPlan(R, upTo(57), 57), { add: [], remove: [57] });
+});
+
+test("click on an earlier knitted row goes back to it", () => {
+  const p = clickPlan(R, upTo(57), 30);
+  assert.deepEqual(p.add, []);
+  assert.deepEqual(p.remove, R.filter((r) => r >= 31 && r <= 57));
+});
+
+test("click fills gaps left by earlier single-row marks", () => {
+  // Version 1 toggled single rows: 1..57 and 77 marked, 58..76 not.
+  const done = upTo(57); done.add(77);
+  assert.deepEqual(clickPlan(R, done, 76).add, R.filter((r) => r >= 58 && r <= 76));
+  assert.deepEqual(clickPlan(R, done, 77), { add: [], remove: [77] });
+  const p = clickPlan(R, done, 80);
+  assert.deepEqual(p.add, R.filter((r) => (r >= 58 && r <= 76) || (r >= 78 && r <= 80)));
+});
+
+test("rows from a first row other than 1", () => {
+  const rows = [41, 42, 43, 44, 45];
+  assert.deepEqual(clickPlan(rows, new Set(), 43), { add: [41, 42, 43], remove: [] });
+});
+
+test("gaps below the last knitted row", () => {
+  const done = upTo(57); done.add(77); done.delete(10);
+  assert.deepEqual(gapsOf(R, done), [10, ...R.filter((r) => r >= 58 && r <= 76)]);
+  assert.deepEqual(gapsOf(R, upTo(57)), []);
+  assert.deepEqual(gapsOf(R, new Set()), []);
+});
+
+test("row ranges in words", () => {
+  assert.equal(rangesText([58, 59, 60, 64]), "58–60, 64");
+  assert.equal(rangesText([5]), "5");
+  assert.equal(rangesText([1, 3, 5, 7, 9]), "1, 3, 5, …");
+});

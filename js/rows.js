@@ -361,6 +361,39 @@ export function allRowsOf(pages) {
   return [...set].sort((a, b) => a - b);
 }
 
+// What a click on row n does. Rows are knitted in order, so a click means
+// "knitted up to here": every row up to n becomes knitted. A click on the last
+// knitted row takes it back; a click on an earlier knitted row goes back to it.
+// rows: all row numbers, sorted; done: Set. Returns {add, remove}.
+export function clickPlan(rows, done, n) {
+  let last = null;
+  for (const r of rows) if (done.has(r)) last = r;
+  if (done.has(n) && n === last) return { add: [], remove: [n] };
+  return {
+    add: rows.filter((r) => r <= n && !done.has(r)),
+    remove: rows.filter((r) => r > n && done.has(r)),
+  };
+}
+
+// Rows left unmarked below the last knitted one.
+export function gapsOf(rows, done) {
+  let last = null;
+  for (const r of rows) if (done.has(r)) last = r;
+  return last == null ? [] : rows.filter((r) => r < last && !done.has(r));
+}
+
+// [58, 59, 60, 64] -> "58–60, 64" (at most `max` pieces, then "…").
+export function rangesText(ns, max = 3) {
+  const parts = [];
+  for (const n of ns) {
+    const p = parts[parts.length - 1];
+    if (p && n === p[1] + 1) p[1] = n;
+    else parts.push([n, n]);
+  }
+  const text = parts.slice(0, max).map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(", ");
+  return parts.length > max ? text + ", …" : text;
+}
+
 export function progressOf(pages, done) {
   const rows = allRowsOf(pages);
   const set = new Set(done || []);
