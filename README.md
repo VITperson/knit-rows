@@ -29,7 +29,8 @@ offline.
 4. **Zoom and move** — pinch on the trackpad or the mouse wheel to zoom,
    drag or two-finger scroll to move, `+` / `−`, `0` for the whole page,
    `C` to jump to the current row. `F` (or the button at the top right) —
-   full screen. `P` (or the panel button next to it) hides the side panel;
+   full screen; while it is on, the screen does not dim or go to sleep
+   (Screen Wake Lock, where the browser supports it). `P` (or the panel button next to it) hides the side panel;
    the progress and the "row done" button then sit in a small box over the
    chart. The choice is remembered in this browser.
 5. **Stitches in a row** — "Считать петли в ряду" counts the stitches of the

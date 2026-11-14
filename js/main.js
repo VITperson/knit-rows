@@ -358,8 +358,33 @@ function toggleFullscreen() {
   } catch { toast("Браузер не разрешил полноэкранный режим"); }
 }
 
+// While the chart is full screen the display must not dim: she is knitting, not
+// touching the laptop. The browser drops the lock whenever the tab is hidden, so
+// it is taken again on return if the page is still full screen.
+let wakeLock = null;
+async function holdScreen(on) {
+  if (!("wakeLock" in navigator)) return;
+  if (!on) {
+    const l = wakeLock;
+    wakeLock = null;
+    if (l) l.release().catch(() => {});
+    return;
+  }
+  if (wakeLock && !wakeLock.released) return;
+  try {
+    const l = await navigator.wakeLock.request("screen");
+    if (!fsElement()) { l.release().catch(() => {}); return; }
+    wakeLock = l;
+    l.addEventListener("release", () => { if (wakeLock === l) wakeLock = null; });
+  } catch (e) { console.warn("wake lock:", e); }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && fsElement()) holdScreen(true);
+});
+
 function updateFsButton() {
   const on = !!fsElement();
+  holdScreen(on);
   const b = $("btn-fs");
   b.title = on ? "Выйти из полноэкранного режима (F)" : "Во весь экран (F)";
   b.setAttribute("aria-label", on ? "Выйти из полноэкранного режима" : "Во весь экран");
